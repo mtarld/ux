@@ -2888,6 +2888,7 @@ __metadata:
   dependencies:
     "@googlemaps/js-api-loader": "npm:^1.16.6"
     "@hotwired/stimulus": "npm:^3.0.0"
+    "@symfony/ux-map": "workspace:*"
     "@types/google.maps": "npm:^3.55.9"
   peerDependencies:
     "@googlemaps/js-api-loader": ^1.16.6
@@ -2913,6 +2914,7 @@ __metadata:
   resolution: "@symfony/ux-leaflet-map@workspace:src/Map/src/Bridge/Leaflet/assets"
   dependencies:
     "@hotwired/stimulus": "npm:^3.0.0"
+    "@symfony/ux-map": "workspace:*"
     "@types/leaflet": "npm:^1.9.12"
     leaflet: "npm:^1.9.4"
   peerDependencies:
@@ -2939,7 +2941,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@symfony/ux-map@workspace:src/Map/assets":
+"@symfony/ux-map@workspace:*, @symfony/ux-map@workspace:src/Map/assets":
   version: 0.0.0-use.local
   resolution: "@symfony/ux-map@workspace:src/Map/assets"
   dependencies:

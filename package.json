@@ -6,8 +6,8 @@
         "src/*/src/Bridge/*/assets"
     ],
     "scripts": {
-        "build": "yarn workspaces foreach -Apt run build",
-        "test": "yarn workspaces foreach -Apt run test",
+        "build": "yarn workspaces foreach -Ap --topological-dev run build",
+        "test": "yarn workspaces foreach -Ap --topological-dev run test",
         "check": "biome check",
         "ci": "biome ci"
     },
