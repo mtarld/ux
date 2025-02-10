@@ -3042,6 +3042,7 @@ __metadata:
   dependencies:
     "@hotwired/stimulus": "npm:^3.0.0"
     "@hotwired/turbo": "npm:^7.1.0 || ^8.0"
+    "@types/hotwired__turbo": "npm:^8.0.4"
   peerDependencies:
     "@hotwired/stimulus": ^3.0.0
     "@hotwired/turbo": ^7.1.1 || ^8.0
@@ -3277,6 +3278,13 @@ __metadata:
   dependencies:
     "@types/node": "npm:*"
   checksum: 10c0/b1d32c5ae7bd52cf60e29df20407904c4312a39612e7ec2ee23c1e3731c1cfe31d97c6941bf6cb52f5f929d50d86d92dd506436b63fafa833181d439b628885e
+  languageName: node
+  linkType: hard
+
+"@types/hotwired__turbo@npm:^8.0.4":
+  version: 8.0.4
+  resolution: "@types/hotwired__turbo@npm:8.0.4"
+  checksum: 10c0/87fb69ea0dab21fd2a6e3e6d18cdaf679e3d7c8ea1f6f2b59d05c24a96cf3faf80a4c0ce5f57161afea9b61f2cc542f9e33cbdc6475fc4003d79516a94cedb5c
   languageName: node
   linkType: hard
 
