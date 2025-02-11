@@ -50,6 +50,8 @@ jobs:
             env:
                 BASE_DIST_FILES: ${{ steps.base-dist-files.outputs.files }}
                 PR_DIST_FILES: ${{ steps.pr-dist-files.outputs.files }}
+                BASE_REPO_NAME: ${{ github.event.pull_request.base.repo.full_name }}
+                BASE_REF_NAME: ${{ github.event.pull_request.base.ref }}
             with:
               result-encoding: string
               script: |
