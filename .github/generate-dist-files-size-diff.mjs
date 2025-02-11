@@ -6,9 +6,9 @@
 Usage:
 ```shell
 BASE_DIST_FILES='{"src/Autocomplete/assets/dist/controller.js":{"size":15382,"size_gz":3716},"src/Chartjs/assets/dist/controller.js":{"size":2281,"size_gz":771},"src/Cropperjs/assets/dist/controller.js":{"size":1044,"size_gz":475}}' \
-PR_DIST_FILES='{"src/Chartjs/assets/dist/controller.js":{"size":1281,"size_gz":171},"src/Cropperjs/assets/dist/controller.js":{"size":1044,"size_gz":475},"src/Cropperjs/assets/dist/style.min.css":{"size":32,"size_gz":66},"src/Dropzone/assets/dist/controller.js":{"size":3199,"size_gz":816},"src/Map/src/Bridge/Google/assets/dist/foo.js":{"size":3199,"size_gz":816}}' \
-BASE_REPO_NAME='kocal/symfony-ux' \
-BASE_REF_NAME='my-branch-name' \
+HEAD_DIST_FILES='{"src/Chartjs/assets/dist/controller.js":{"size":1281,"size_gz":171},"src/Cropperjs/assets/dist/controller.js":{"size":1044,"size_gz":475},"src/Cropperjs/assets/dist/style.min.css":{"size":32,"size_gz":66},"src/Dropzone/assets/dist/controller.js":{"size":3199,"size_gz":816},"src/Map/src/Bridge/Google/assets/dist/foo.js":{"size":3199,"size_gz":816}}' \
+HEAD_REPO_NAME='kocal/symfony-ux' \
+HEAD_REF='my-branch-name' \
   node .github/generate-dist-files-size-diff.mjs
 ```
  */
@@ -17,16 +17,16 @@ if (!process.env.BASE_DIST_FILES) {
     throw new Error('Missing or invalid "BASE_DIST_FILES" env variable.');
 }
 
-if (!process.env.PR_DIST_FILES) {
-    throw new Error('Missing or invalid "PR_DIST_FILES" env variable.');
+if (!process.env.HEAD_DIST_FILES) {
+    throw new Error('Missing or invalid "HEAD_DIST_FILES" env variable.');
 }
 
-if (!process.env.BASE_REPO_NAME) {
-    throw new Error('Missing or invalid "BASE_REPO_NAME" env variable.');
+if (!process.env.HEAD_REPO_NAME) {
+    throw new Error('Missing or invalid "HEAD_REPO_NAME" env variable.');
 }
 
-if (!process.env.BASE_REF_NAME) {
-    throw new Error('Missing or invalid "BASE_REF_NAME" env variable.');
+if (!process.env.HEAD_REF) {
+    throw new Error('Missing or invalid "HEAD_REF" env variable.');
 }
 
 /**
@@ -67,11 +67,11 @@ function formatDiffPercent(percent) {
 }
 
 export function main() {
-    const repoUrl = `https://github.com/${process.env.BASE_REPO_NAME}`;
+    const repoUrl = `https://github.com/${process.env.HEAD_REPO_NAME}`;
     /** @type {Record<string, {size: number, size_gz: number}>} */
     const base = JSON.parse(process.env.BASE_DIST_FILES);
     /** @type {Record<string, {size: number, size_gz: number}>} */
-    const pr = JSON.parse(process.env.PR_DIST_FILES);
+    const pr = JSON.parse(process.env.HEAD_DIST_FILES);
     let output = '<h1>📊 Packages dist files size difference</h1>\n\n';
 
     /**
@@ -108,7 +108,7 @@ export function main() {
                         meta: {
                             packageName,
                             bridgeName,
-                            url: isBridge ? `${repoUrl}/tree/${process.env.BASE_REF_NAME}/src/${packageName}/src/Bridge/${bridgeName}/assets/dist` : `${repoUrl}/tree/${process.env.BASE_REF_NAME}/src/${packageName}/assets/dist`,
+                            url: isBridge ? `${repoUrl}/tree/${process.env.HEAD_REF}/src/${packageName}/src/Bridge/${bridgeName}/assets/dist` : `${repoUrl}/tree/${process.env.HEAD_REF}/src/${packageName}/assets/dist`,
                         }, files: new Set(),
                     });
                 }
@@ -126,7 +126,7 @@ export function main() {
                     },
                     meta: {
                         fileNameShort: file.replace(isBridge ? `src/${file.split('/')[1]}/src/Bridge/${file.split('/')[4]}/assets/dist/` : `src/${file.split('/')[1]}/assets/dist/`, ''),
-                        fileNameUrl: `${repoUrl}/blob/${process.env.BASE_REF_NAME}/${file}`,
+                        fileNameUrl: `${repoUrl}/blob/${process.env.HEAD_REF}/${file}`,
                     },
                 });
             }
