@@ -108,6 +108,7 @@ function getRollupConfiguration({ packageRoot, inputFiles }) {
             typescript({
                 filterRoot: '.',
                 tsconfig: path.join(__dirname, '..', 'tsconfig.json'),
+                noEmitOnError: true,
                 include: [
                     'src/**/*.ts',
                     // TODO: Remove for the next major release
