@@ -188,7 +188,7 @@ final class LiveComponentExtension extends Extension implements PrependExtension
         $container->register('ux.live_component.metadata_factory', LiveComponentMetadataFactory::class)
             ->setArguments([
                 new Reference('ux.twig_component.component_factory'),
-                new Reference('property_info'),
+                new Reference('type_info.resolver'),
             ])
             ->addTag('kernel.reset', ['method' => 'reset'])
         ;

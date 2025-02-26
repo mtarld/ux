@@ -18,10 +18,15 @@ use Symfony\Component\PropertyAccess\Exception\UninitializedPropertyException;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 use Symfony\Component\PropertyInfo\Extractor\ReflectionExtractor;
 use Symfony\Component\PropertyInfo\PropertyInfoExtractor;
-use Symfony\Component\PropertyInfo\Type;
 use Symfony\Component\Serializer\Exception\ExceptionInterface as SerializerExceptionInterface;
 use Symfony\Component\Serializer\Normalizer\DenormalizerInterface;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
+use Symfony\Component\TypeInfo\Type;
+use Symfony\Component\TypeInfo\Type\CollectionType;
+use Symfony\Component\TypeInfo\Type\CompositeTypeInterface;
+use Symfony\Component\TypeInfo\Type\ObjectType;
+use Symfony\Component\TypeInfo\Type\WrappingTypeInterface;
+use Symfony\Component\TypeInfo\TypeIdentifier;
 use Symfony\UX\LiveComponent\Attribute\AsLiveComponent;
 use Symfony\UX\LiveComponent\Attribute\LiveProp;
 use Symfony\UX\LiveComponent\Exception\HydrationException;
@@ -266,33 +271,29 @@ final class LiveComponentHydrator
                 throw new \LogicException(\sprintf('The LiveProp "%s" on component "%s" has "useSerializerForHydration: true", but the given serializer does not implement DenormalizerInterface.', $propMetadata->getName(), $parentObject::class));
             }
 
-            if ($propMetadata->collectionValueType()) {
-                $builtInType = $propMetadata->collectionValueType()->getBuiltinType();
-                if (Type::BUILTIN_TYPE_OBJECT === $builtInType) {
-                    $type = $propMetadata->collectionValueType()->getClassName().'[]';
-                } else {
-                    $type = $builtInType.'[]';
-                }
-            } else {
-                $type = $propMetadata->getType();
-            }
-
-            if (null === $type) {
+            if (null === $type = $propMetadata->getType()) {
                 throw new \LogicException(\sprintf('The "%s::%s" object should be hydrated with the Serializer, but no type could be guessed.', $parentObject::class, $propMetadata->getName()));
             }
 
-            return $this->serializer->denormalize($value, $type, 'json', $propMetadata->serializationContext());
-        }
-
-        if ($propMetadata->collectionValueType() && Type::BUILTIN_TYPE_OBJECT === $propMetadata->collectionValueType()->getBuiltinType()) {
-            $collectionClass = $propMetadata->collectionValueType()->getClassName();
-            foreach ($value as $key => $objectItem) {
-                $value[$key] = $this->hydrateObjectValue($objectItem, $collectionClass, true, $propMetadata->getFormat(), $parentObject::class, \sprintf('%s.%s', $propMetadata->getName(), $key), $parentObject);
+            if ($type->isNullable()) {
+                $type = $type->getWrappedType();
             }
+
+            if ($isCollection = $type instanceof CollectionType) {
+                $type = $type->getCollectionValueType();
+            }
+
+            while ($type instanceof WrappingTypeInterface) {
+                $type = $type->getWrappedType();
+            }
+
+            $typeString = $type.($isCollection ? '[]' : '');
+
+            return $this->serializer->denormalize($value, $typeString, 'json', $propMetadata->serializationContext());
         }
 
         // no type? no hydration
-        if (!$propMetadata->getType()) {
+        if (null === $type = $propMetadata->getType()) {
             return $value;
         }
 
@@ -300,16 +301,41 @@ final class LiveComponentHydrator
             return null;
         }
 
-        if (\is_string($value) && $propMetadata->isBuiltIn() && \in_array($propMetadata->getType(), ['int', 'float', 'bool'], true)) {
-            return self::coerceStringValue($value, $propMetadata->getType(), $propMetadata->allowsNull());
+        if ($isNullable = $type->isNullable()) {
+            $type = $type->getWrappedType();
+        }
+
+        if ($type instanceof CollectionType) {
+            $collectionValueType = $type->getCollectionValueType();
+            if ($collectionValueType instanceof CompositeTypeInterface) {
+                $collectionValueType = $collectionValueType->getTypes()[0];
+            }
+
+            while ($collectionValueType instanceof WrappingTypeInterface) {
+                $collectionValueType = $collectionValueType->getWrappedType();
+            }
+
+            if ($collectionValueType instanceof ObjectType) {
+                foreach ($value as $key => $objectItem) {
+                    $value[$key] = $this->hydrateObjectValue($objectItem, $collectionValueType->getClassName(), true, $propMetadata->getFormat(), $parentObject::class, \sprintf('%s.%s', $propMetadata->getName(), $key), $parentObject);
+                }
+            }
+        }
+
+        if (\is_string($value) && $type->isIdentifiedBy(TypeIdentifier::INT, TypeIdentifier::FLOAT, TypeIdentifier::BOOL)) {
+            return self::coerceStringValue($value, $type, $isNullable);
+        }
+
+        while ($type instanceof WrappingTypeInterface) {
+            $type = $type->getWrappedType();
+        }
+
+        if ($type instanceof ObjectType) {
+            return $this->hydrateObjectValue($value, $type->getClassName(), $isNullable, $propMetadata->getFormat(), $parentObject::class, $propMetadata->getName(), $parentObject);
         }
 
         // for all other built-ins: int, boolean, array, return as is
-        if ($propMetadata->isBuiltIn()) {
-            return $value;
-        }
-
-        return $this->hydrateObjectValue($value, $propMetadata->getType(), $propMetadata->allowsNull(), $propMetadata->getFormat(), $parentObject::class, $propMetadata->getName(), $parentObject);
+        return $value;
     }
 
     public function addChecksumToData(array $data): array
@@ -319,18 +345,18 @@ final class LiveComponentHydrator
         return $data;
     }
 
-    private static function coerceStringValue(string $value, string $type, bool $allowsNull): int|float|bool|null
+    private static function coerceStringValue(string $value, Type $type, bool $isNullable): int|float|bool|null
     {
         $value = trim($value);
 
-        if ('' === $value && $allowsNull) {
+        if ('' === $value && $isNullable) {
             return null;
         }
 
-        return match ($type) {
-            'int' => (int) $value,
-            'float' => (float) $value,
-            'bool' => self::coerceStringToBoolean($value),
+        return match (true) {
+            $type->isIdentifiedBy(TypeIdentifier::INT) => (int) $value,
+            $type->isIdentifiedBy(TypeIdentifier::FLOAT) => (float) $value,
+            $type->isIdentifiedBy(TypeIdentifier::BOOL) => self::coerceStringToBoolean($value),
             default => throw new \LogicException(\sprintf('Cannot coerce value "%s" to type "%s"', $value, $type)),
         };
     }
@@ -462,15 +488,35 @@ final class LiveComponentHydrator
             return $value;
         }
 
-        if (\is_array($value)) {
-            if ($propMetadata->collectionValueType() && Type::BUILTIN_TYPE_OBJECT === $propMetadata->collectionValueType()->getBuiltinType()) {
-                $collectionClass = $propMetadata->collectionValueType()->getClassName();
-                foreach ($value as $key => $objectItem) {
-                    if (!$objectItem instanceof $collectionClass) {
-                        throw new \LogicException(\sprintf('The LiveProp "%s" on component "%s" is an array. We determined the array is full of %s objects, but at least one key had a different value of %s', $propMetadata->getName(), $parentObject::class, $collectionClass, get_debug_type($objectItem)));
-                    }
+        if (!$type = $propMetadata->getType()) {
+            throw new \LogicException(\sprintf('The "%s" property on component "%s" is missing its property-type. Add the "%s" type so the object can be hydrated later.', $propMetadata->getName(), $parentObject::class, $value::class));
+        }
 
-                    $value[$key] = $this->dehydrateObjectValue($objectItem, $collectionClass, $propMetadata->getFormat(), $parentObject);
+        if (\is_array($value)) {
+            if ($type->isNullable()) {
+                $type = $type->getWrappedType();
+            }
+
+            if ($type instanceof CollectionType) {
+                $collectionValueType = $type->getCollectionValueType();
+                if ($collectionValueType instanceof CompositeTypeInterface) {
+                    $collectionValueType = $collectionValueType->getTypes()[0];
+                }
+
+                while ($collectionValueType instanceof WrappingTypeInterface) {
+                    $collectionValueType = $collectionValueType->getWrappedType();
+                }
+
+                if ($collectionValueType instanceof ObjectType) {
+                    $collectionClass = $collectionValueType->getClassName();
+
+                    foreach ($value as $key => $objectItem) {
+                        if (!$objectItem instanceof $collectionClass) {
+                            throw new \LogicException(\sprintf('The LiveProp "%s" on component "%s" is an array. We determined the array is full of %s objects, but at least one key had a different value of %s', $propMetadata->getName(), $parentObject::class, $collectionClass, get_debug_type($objectItem)));
+                        }
+
+                        $value[$key] = $this->dehydrateObjectValue($objectItem, $collectionClass, $propMetadata->getFormat(), $parentObject);
+                    }
                 }
             }
 
@@ -485,14 +531,15 @@ final class LiveComponentHydrator
             throw new \LogicException(\sprintf('Unable to dehydrate value of type "%s" for property "%s" on component "%s". Change this to a simpler type of an object that can be dehydrated. Or set the hydrateWith/dehydrateWith options in LiveProp or set "useSerializerForHydration: true" on the LiveProp to use the serializer.', get_debug_type($value), $propMetadata->getName(), $parentObject::class));
         }
 
-        if (!$propMetadata->getType() || $propMetadata->isBuiltIn()) {
-            throw new \LogicException(\sprintf('The "%s" property on component "%s" is missing its property-type. Add the "%s" type so the object can be hydrated later.', $propMetadata->getName(), $parentObject::class, $value::class));
+        while ($type instanceof WrappingTypeInterface) {
+            $type = $type->getWrappedType();
         }
 
-        // at this point, we have an object and can assume $propMetadata->getType()
-        // is set correctly (needed for hydration later)
+        if ($type instanceof ObjectType) {
+            return $this->dehydrateObjectValue($value, $type->getClassName(), $propMetadata->getFormat(), $parentObject);
+        }
 
-        return $this->dehydrateObjectValue($value, $propMetadata->getType(), $propMetadata->getFormat(), $parentObject);
+        return $value;
     }
 
     private function dehydrateObjectValue(object $value, string $classType, ?string $dateFormat, object $parentObject): mixed

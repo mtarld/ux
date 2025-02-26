@@ -12,6 +12,12 @@
 namespace Symfony\UX\LiveComponent\Util;
 
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\TypeInfo\Type;
+use Symfony\Component\TypeInfo\Type\BuiltinType;
+use Symfony\Component\TypeInfo\Type\CompositeTypeInterface;
+use Symfony\Component\TypeInfo\Type\ObjectType;
+use Symfony\Component\TypeInfo\Type\WrappingTypeInterface;
+use Symfony\Component\TypeInfo\TypeIdentifier;
 use Symfony\UX\LiveComponent\Exception\HydrationException;
 use Symfony\UX\LiveComponent\LiveComponentHydrator;
 use Symfony\UX\LiveComponent\Metadata\LiveComponentMetadata;
@@ -40,11 +46,20 @@ final class QueryStringPropsExtractor
         }
         $data = [];
 
+        $typeIsScalar = function (Type $type) use (&$typeIsScalar): bool {
+            return match (true) {
+                $type instanceof BuiltinType => $type->getTypeIdentifier()->isScalar(),
+                $type instanceof CompositeTypeInterface => $type->composedTypesAreSatisfiedBy($typeIsScalar),
+                $type instanceof WrappingTypeInterface => $type->wrappedTypeIsSatisfiedBy($typeIsScalar),
+                default => false,
+            };
+        };
+
         foreach ($metadata->getAllLivePropsMetadata($component) as $livePropMetadata) {
             if ($queryMapping = $livePropMetadata->urlMapping()) {
                 $frontendName = $livePropMetadata->calculateFieldName($component, $livePropMetadata->getName());
                 if (null !== ($value = $query[$queryMapping->as ?? $frontendName] ?? null)) {
-                    if ('' === $value && null !== $livePropMetadata->getType() && (!$livePropMetadata->isBuiltIn() || 'array' === $livePropMetadata->getType())) {
+                    if ('' === $value && null !== $livePropMetadata->getType() && (!$livePropMetadata->getType()->isSatisfiedBy($typeIsScalar))) {
                         // Cast empty string to empty array for objects and arrays
                         $value = [];
                     }
@@ -68,15 +83,28 @@ final class QueryStringPropsExtractor
 
     private function isValueTypeConsistent(mixed $value, LivePropMetadata $livePropMetadata): bool
     {
-        $propType = $livePropMetadata->getType();
-
-        if ($livePropMetadata->allowsNull() && null === $value) {
+        if (null === $type = $livePropMetadata->getType()) {
             return true;
         }
 
-        return
-            \in_array($propType, [null, 'mixed'])
-            || $livePropMetadata->isBuiltIn() && ('\is_'.$propType)($value)
-            || !$livePropMetadata->isBuiltIn() && $value instanceof $propType;
+        if ($type->isIdentifiedBy(TypeIdentifier::MIXED)) {
+            return true;
+        }
+
+        if ($type->isNullable() && null === $value) {
+            return true;
+        }
+
+        while ($type instanceof WrappingTypeInterface) {
+            $type = $type->getWrappedType();
+        }
+
+        if ($type instanceof ObjectType) {
+            $className = $type->getClassName();
+
+            return $value instanceof $className;
+        }
+
+        return ('is_'.$type)($value);
     }
 }
