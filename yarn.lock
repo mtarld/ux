@@ -2814,7 +2814,7 @@ __metadata:
   resolution: "@symfony/stimulus-bundle@workspace:src/StimulusBundle/assets"
   peerDependencies:
     "@hotwired/stimulus": ^3.0.0
-    "@symfony/stimulus-bridge": ^3.2.0
+    "@symfony/stimulus-bridge": ^3.2.0 || ^4.0.0
   languageName: unknown
   linkType: soft
 
