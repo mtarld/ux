@@ -9,12 +9,12 @@ require __DIR__.'/../vendor/autoload.php';
 use Symfony\Component\Finder\Finder;
 
 $finder = (new Finder())
-    ->in([__DIR__.'/../src/*/', __DIR__.'/../src/*/src/Bridge/*/', __DIR__.'/../ux.symfony.com/'])
+    ->in([__DIR__.'/../src/*/', __DIR__.'/../src/*/src/Bridge/*/', __DIR__.'/../ux.symfony.com/', __DIR__.'/../test_apps/*/'])
     ->depth(0)
     ->name('composer.json')
 ;
 
-// 1. Find all UX packages 
+// 1. Find all UX packages
 $uxPackages = [];
 foreach ($finder as $composerFile) {
     $json = file_get_contents($composerFile->getPathname());
@@ -54,7 +54,7 @@ foreach ($finder as $composerFile) {
             $packageData[$key][$packageName] = '@dev';
         }
     }
-    
+
     if ($repositories) {
         $packageData['repositories'] = $repositories;
     }
