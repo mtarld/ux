@@ -4,10 +4,12 @@ on:
     push:
         paths-ignore:
             - 'src/*/doc/**'
+            - 'src/**/*.md'
             - 'ux.symfony.com/**'
     pull_request:
         paths-ignore:
             - 'src/*/doc/**'
+            - 'src/**/*.md'
             - 'ux.symfony.com/**'
 
 jobs:

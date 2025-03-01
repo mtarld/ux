@@ -6,12 +6,14 @@ on:
             - 'ux.symfony.com/**'
             - 'src/*/**'
             - '!src/*/doc/**'
+            - '!src/**/*.md'
             - '.github/**'
     pull_request:
         paths:
             - 'ux.symfony.com/**'
             - 'src/*/**'
             - '!src/*/doc/**'
+            - '!src/**/*.md'
             - '.github/**'
 
 jobs:
