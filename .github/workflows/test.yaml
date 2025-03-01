@@ -136,7 +136,88 @@ jobs:
                 cache: 'yarn'
                 cache-dependency-path: |
                   yarn.lock
-                  **/package.json
+                  package.json
+                  src/**/package.json
             - run: yarn --immutable
             - run: yarn playwright install
             - run: yarn test
+
+    test-app-encore-app:
+      name: "Test Apps / Encore (${{ matrix.name}})"
+      runs-on: ubuntu-latest
+      strategy:
+        fail-fast: false
+        matrix:
+          include:
+            - name: Internal, from "vendor/"
+              ux-packages-source: php-vendor
+            - name: External, from "npm add"
+              ux-packages-source: js-packages
+      steps:
+        # Setup
+        - uses: actions/checkout@v4
+
+        - run: corepack enable
+
+        - uses: actions/setup-node@v4
+          with:
+            cache: 'yarn'
+            cache-dependency-path: |
+              yarn.lock
+              package.json
+              src/**/package.json
+              test_apps/encore-app/package.json
+
+        - uses: shivammathur/setup-php@v2
+
+        - name: Install root dependencies
+          uses: ramsey/composer-install@v3
+          with:
+            working-directory: ${{ github.workspace }}
+
+        - name: Build root packages
+          run: php .github/build-packages.php
+          working-directory: ${{ github.workspace }}
+
+        - uses: ramsey/composer-install@v3
+          with:
+            dependency-versions: 'highest'
+            working-directory: test_apps/encore-app
+
+        - if: matrix.ux-packages-source == 'js-packages'
+          working-directory: test_apps/encore-app
+          run: |
+            PACKAGES_TO_INSTALL=''
+            for PACKAGE in $(cd ../..; yarn workspaces list --no-private --json); do
+              PACKAGE_DIR=../../$(echo $PACKAGE | jq -r '.location')
+              PACKAGES_TO_INSTALL="$PACKAGES_TO_INSTALL $PACKAGE_DIR"
+            done
+            echo "Installing packages: $PACKAGES_TO_INSTALL"
+            yarn add --dev $PACKAGES_TO_INSTALL
+
+        # Validations
+        - name: Ensure UX packages are installed from "${{ matrix.ux-packages-source == 'php-vendor' && 'vendor/symfony/ux-...' || '../../../src/**/assets' }}"
+          working-directory: test_apps/encore-app
+          run: |
+            for PACKAGE in $(cat package.json | jq -c '(.dependencies // {}) + (.devDependencies // {}) | to_entries[] | select(.key | startswith("@symfony/ux-")) | {name: .key, version: .value}'); do
+              PACKAGE_NAME=$(echo $PACKAGE | jq -r '.name')
+              PACKAGE_VERSION=$(echo $PACKAGE | jq -r '.version')
+
+              echo -n "Checking $PACKAGE_NAME@$PACKAGE_VERSION..."
+              if [[ $PACKAGE_VERSION == $EXPECTED_PATTERN* ]]; then
+                echo " OK"
+              else
+                echo " KO"
+                echo "The package version of $PACKAGE_NAME must starts with the pattern (e.g.: $EXPECTED_PATTERN), got $PACKAGE_VERSION instead."
+                exit 1
+              fi
+            done;
+          env:
+            EXPECTED_PATTERN: ${{ matrix.ux-packages-source == 'php-vendor' && 'file:vendor/symfony/*' || '../../src/*' }}
+
+        - name: Run Encore
+          working-directory: test_apps/encore-app
+          run: |
+            YARN_ENABLE_HARDENED_MODE=0 YARN_ENABLE_IMMUTABLE_INSTALLS=0 yarn || (echo "Unable to install Yarn dependencies" && exit 1)
+            yarn encore dev || (echo "Unable to build Encore assets (dev)" && exit 1)
+            yarn encore production || (echo "Unable to build Encore assets (production)" && exit 1)
