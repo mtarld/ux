@@ -154,7 +154,6 @@ jobs:
             - name: External, from "npm add"
               ux-packages-source: js-packages
       steps:
-        # Setup
         - uses: actions/checkout@v4
 
         - run: corepack enable
@@ -179,12 +178,22 @@ jobs:
           run: php .github/build-packages.php
           working-directory: ${{ github.workspace }}
 
+        # We always install PHP deps because we of the UX Translator, which requires `var/translations` to exists
         - uses: ramsey/composer-install@v3
           with:
             dependency-versions: 'highest'
             working-directory: test_apps/encore-app
 
+        - if: matrix.ux-packages-source == 'php-vendor'
+          name: Refresh dependencies from vendor/
+          working-directory: test_apps/encore-app
+          run: yarn
+          env:
+            YARN_ENABLE_HARDENED_MODE: 0
+            YARN_ENABLE_IMMUTABLE_INSTALLS: 0
+
         - if: matrix.ux-packages-source == 'js-packages'
+          name: Install UX JS packages with a JS package manager
           working-directory: test_apps/encore-app
           run: |
             PACKAGES_TO_INSTALL=''
@@ -195,7 +204,6 @@ jobs:
             echo "Installing packages: $PACKAGES_TO_INSTALL"
             yarn add --dev $PACKAGES_TO_INSTALL
 
-        # Validations
         - name: Ensure UX packages are installed from "${{ matrix.ux-packages-source == 'php-vendor' && 'vendor/symfony/ux-...' || '../../../src/**/assets' }}"
           working-directory: test_apps/encore-app
           run: |
@@ -215,9 +223,10 @@ jobs:
           env:
             EXPECTED_PATTERN: ${{ matrix.ux-packages-source == 'php-vendor' && 'file:vendor/symfony/*' || '../../src/*' }}
 
-        - name: Run Encore
+        - name: Run Encore (dev)
           working-directory: test_apps/encore-app
-          run: |
-            YARN_ENABLE_HARDENED_MODE=0 YARN_ENABLE_IMMUTABLE_INSTALLS=0 yarn || (echo "Unable to install Yarn dependencies" && exit 1)
-            yarn encore dev || (echo "Unable to build Encore assets (dev)" && exit 1)
-            yarn encore production || (echo "Unable to build Encore assets (production)" && exit 1)
+          run: yarn encore dev
+
+        - name: Run Encore (prod)
+          working-directory: test_apps/encore-app
+          run: yarn encore production
