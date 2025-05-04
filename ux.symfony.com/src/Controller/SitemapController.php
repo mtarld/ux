@@ -12,6 +12,7 @@
 namespace App\Controller;
 
 use App\Service\LiveDemoRepository;
+use App\Service\Toolkit\ToolkitService;
 use App\Service\UxPackageRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -24,6 +25,7 @@ final class SitemapController extends AbstractController
     public function __construct(
         private readonly UxPackageRepository $uxPackageRepository,
         private readonly LiveDemoRepository $liveDemoRepository,
+        private readonly ToolkitService $toolkitService,
     ) {
     }
 
@@ -61,6 +63,15 @@ final class SitemapController extends AbstractController
         // Live Demos
         foreach ($this->liveDemoRepository->findAll() as $demo) {
             yield $this->generateAbsoluteUrl($demo->getRoute());
+        }
+
+        // Toolkit kits
+        foreach ($this->toolkitService->getKits() as $kitId => $kit) {
+            yield $this->generateAbsoluteUrl('app_toolkit_kit', ['kitId' => $kitId]);
+
+            foreach ($this->toolkitService->getDocumentableComponents($kit) as $component) {
+                yield $this->generateAbsoluteUrl('app_toolkit_component', ['kitId' => $kitId, 'componentName' => $component->name]);
+            }
         }
     }
 
