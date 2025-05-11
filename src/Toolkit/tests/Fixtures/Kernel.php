@@ -16,8 +16,11 @@ use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
 use Symfony\Bundle\TwigBundle\TwigBundle;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpKernel\Kernel as BaseKernel;
+use Symfony\UX\Icons\UXIconsBundle;
 use Symfony\UX\Toolkit\UXToolkitBundle;
 use Symfony\UX\TwigComponent\TwigComponentBundle;
+use TalesFromADev\Twig\Extra\Tailwind\Bridge\Symfony\Bundle\TalesFromADevTwigExtraTailwindBundle;
+use Twig\Extra\TwigExtraBundle\TwigExtraBundle;
 
 final class Kernel extends BaseKernel
 {
@@ -29,6 +32,9 @@ final class Kernel extends BaseKernel
             new FrameworkBundle(),
             new TwigBundle(),
             new TwigComponentBundle(),
+            new TwigExtraBundle(),
+            new UXIconsBundle(),
+            new TalesFromADevTwigExtraTailwindBundle(),
             new UXToolkitBundle(),
         ];
     }
@@ -68,6 +74,9 @@ final class Kernel extends BaseKernel
                 ->public()
 
             ->alias('ux_toolkit.registry.registry_factory', '.ux_toolkit.registry.registry_factory')
+                ->public()
+
+            ->alias('ux_toolkit.registry.local', '.ux_toolkit.registry.local')
                 ->public()
         ;
     }
