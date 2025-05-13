@@ -12,6 +12,10 @@ on:
             - 'src/**/*.md'
             - 'ux.symfony.com/**'
 
+concurrency:
+    group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+    cancel-in-progress: true
+
 jobs:
     coding-style-js:
         name: JavaScript Coding Style
@@ -50,75 +54,81 @@ jobs:
                   echo "The Git workspace is clean. No changes detected."
                 fi
 
-    tests-php-components:
-        runs-on: ubuntu-latest
-        outputs:
-            components: ${{ steps.components.outputs.components }}
-        steps:
-            - uses: actions/checkout@v4
-
-            - id: components
-              run: |
-                components=$(find src/ -mindepth 2 -type f -name composer.json -not -path "*/vendor/*" -printf '%h\n' | jq -R -s -c 'split("\n")[:-1] | map(. | sub("^src/";"")) | sort')
-                echo "$components"
-                echo "components=$components" >> $GITHUB_OUTPUT
-
     tests-php:
         runs-on: ubuntu-latest
-        needs: tests-php-components
         strategy:
             fail-fast: false
             matrix:
-                php-version: ['8.1', '8.3', '8.4']
-                minimum-stability: ['stable', 'dev']
+                php-version: ['8.1', '8.2', '8.3', '8.4']
+                dependency-version: ['']
+                symfony-version: ['']
+                minimum-stability: ['stable']
                 include:
-                  - php-version: '8.1'
-                    dependency-version: 'lowest'
-                  - php-version: '8.3'
-                    dependency-version: 'highest'
-                  - php-version: '8.4'
-                    dependency-version: 'highest'
-                component: ${{ fromJson(needs.tests-php-components.outputs.components )}}
-                exclude:
-                  - php-version: '8.1'
-                    minimum-stability: 'dev'
-                  - php-version: '8.3'
-                    minimum-stability: 'dev'
-                  - component: Swup  # has no tests
-                  - component: Turbo # has its own workflow (test-turbo.yml)
-                  - component: Typed  # has no tests
+                    # dev packages (probably not needed to have multiple such jobs)
+                    -   minimum-stability: 'dev'
+                        php-version: '8.4'
+                    # lowest deps
+                    -   php-version: '8.1'
+                        dependency-version: 'lowest'
+                    # LTS version of Symfony
+                    -   php-version: '8.1'
+                        symfony-version: '6.4.*'
 
+        env:
+            SYMFONY_REQUIRE: ${{ matrix.symfony-version }}
         steps:
             - uses: actions/checkout@v4
 
-            - uses: shivammathur/setup-php@v2
+            - name: Configure environment
+              run: |
+                  echo COLUMNS=120 >> $GITHUB_ENV
+                  echo COMPOSER_MIN_STAB='composer config minimum-stability ${{ matrix.minimum-stability || 'stable' }} --ansi' >> $GITHUB_ENV
+                  echo COMPOSER_UP='composer update ${{ matrix.dependency-version == 'lowest' && '--prefer-lowest' || '' }} --no-progress --no-interaction --ansi' >> $GITHUB_ENV
+                  echo PHPUNIT='vendor/bin/simple-phpunit' >> $GITHUB_ENV
+                  [ 'lowest' = '${{ matrix.dependency-version }}' ] && export SYMFONY_DEPRECATIONS_HELPER=weak
+
+                  # Swup and Typed have no tests, Turbo has its own workflow file
+                  PACKAGES=$(find src/ -mindepth 2 -type f -name composer.json -not -path "*/vendor/*" -printf '%h\n' | sed 's/^src\///' | grep -Ev "Swup|Turbo|Typed" | sort |  tr '\n' ' ')
+                  echo "Packages: $PACKAGES"
+                  echo "PACKAGES=$PACKAGES" >> $GITHUB_ENV
+
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
               with:
                 php-version: ${{ matrix.php-version }}
+                tools: flex
 
-            - name: Install root packages
-              uses: ramsey/composer-install@v3
-              with:
-                working-directory: ${{ github.workspace }}
-                dependency-versions: ${{ matrix.dependency-version }}
+            - name: Install root dependencies
+              run: composer install
 
             - name: Build root packages
               run: php .github/build-packages.php
-              working-directory: ${{ github.workspace }}
 
-            - name: Configure ${{ matrix.minimum-stability }} stability
-              if: ${{ matrix.minimum-stability }}
-              run: composer config minimum-stability ${{ matrix.minimum-stability }}
-              working-directory: "src/${{ matrix.component }}"
+            - name: Run packages tests
+              run: |
+                _run_task() {
+                    local ok=0
+                    local title="$1"
+                    local start=$(date -u +%s)
+                    OUTPUT=$(bash -xc "$2" 2>&1) || ok=$?
+                    local end=$(date -u +%s)
 
-            - name: Install ${{ matrix.component }} packages
-              uses: ramsey/composer-install@v3
-              with:
-                working-directory: "src/${{ matrix.component }}"
-                dependency-versions: ${{ matrix.dependency-version }}
+                    if [[ $ok -ne 0 ]]; then
+                      printf "\n%-70s%10s\n" $title $(($end-$start))s
+                      echo "$OUTPUT"
+                      echo "Job exited with: $ok"
+                      echo -e "\n::error::KO $title\\n"
+                    else
+                      printf "::group::%-68s%10s\n" $title $(($end-$start))s
+                      echo "$OUTPUT"
+                      echo -e "\n\\e[32mOK\\e[0m $title\\n\\n::endgroup::"
+                    fi
 
-            - name: ${{ matrix.component }} Tests
-              working-directory: "src/${{ matrix.component }}"
-              run: vendor/bin/simple-phpunit
+                    exit $ok
+                }
+                export -f _run_task
+
+                echo "$PACKAGES" | xargs -n1 | parallel -j +3 "_run_task {} '(cd src/{} && $COMPOSER_MIN_STAB && $COMPOSER_UP && $PHPUNIT)'"
 
     tests-js:
         runs-on: ubuntu-latest
