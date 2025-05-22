@@ -1,4 +1,4 @@
-name: Toolkit Kits
+name: Toolkit Kits Code Quality
 
 on:
     push:

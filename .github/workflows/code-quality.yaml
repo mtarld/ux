@@ -1,0 +1,72 @@
+name: Code Quality
+
+on:
+    push:
+        paths-ignore:
+            - 'src/*/doc/**'
+            - 'src/**/*.md'
+            - 'ux.symfony.com/**'
+    pull_request:
+        paths-ignore:
+            - 'src/*/doc/**'
+            - 'src/**/*.md'
+            - 'ux.symfony.com/**'
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+    cancel-in-progress: true
+
+jobs:
+    coding-style-js:
+        name: JavaScript Coding Style
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - run: npm i -g corepack && corepack enable
+            - uses: actions/setup-node@v4
+              with:
+                cache: 'yarn'
+            - run: yarn --immutable
+            - run: yarn ci
+
+    phpstan:
+        name: PHPStan
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                package: ${{ fromJson(needs.php-packages-matrix.outputs.packages) }}
+        steps:
+            -   name: Checkout
+                uses: actions/checkout@v4
+
+            - name: Configure environment
+              run: |
+                  echo COLUMNS=120 >> $GITHUB_ENV
+                  echo COMPOSER_MIN_STAB='composer config minimum-stability stable --ansi' >> $GITHUB_ENV
+                  echo COMPOSER_UP='composer update --no-progress --no-interaction --ansi' >> $GITHUB_ENV
+                  echo PHPSTAN='vendor/bin/phpstan' >> $GITHUB_ENV
+
+                  # TODO: Only Turbo has PHPStan configuration, let's improve this later :)
+                  PACKAGES=Turbo
+                  #PACKAGES=$(find src/ -mindepth 2 -type f -name composer.json -not -path "*/vendor/*" -printf '%h\n' | sed 's/^src\///' | sort |  tr '\n' ' ')
+                  echo "Packages: $PACKAGES"
+                  echo "PACKAGES=$PACKAGES" >> $GITHUB_ENV
+
+            -   name: Setup PHP
+                uses: shivammathur/setup-php@v2
+                with:
+                    php-version: '8.1'
+                    tools: flex
+
+            - name: Install root dependencies
+              run: composer install
+
+            - name: Build root packages
+              run: php .github/build-packages.php
+
+            - name: Run PHPStan on packages
+              run: |
+                  source .github/workflows/.utils.sh
+
+                  echo "$PACKAGES" | xargs -n1 | parallel -j +3 "_run_task {} '(cd src/{} && $COMPOSER_MIN_STAB && $COMPOSER_UP && $PHPSTAN)'"

@@ -1,4 +1,4 @@
-name: Symfony UX Turbo
+name: Functional Tests
 
 on:
     push:
@@ -9,31 +9,7 @@ on:
             - 'src/Turbo/**'
 
 jobs:
-    phpstan:
-        runs-on: ubuntu-latest
-        steps:
-            -   name: Checkout
-                uses: actions/checkout@v4
-
-            - name: Setup PHP
-              uses: shivammathur/setup-php@v2
-              with:
-                  php-version: '8.1'
-                  extensions: zip
-
-            - uses: ramsey/composer-install@v3
-              with:
-                  working-directory: src/Turbo
-
-            - name: Install PHPUnit dependencies
-              working-directory: src/Turbo
-              run: vendor/bin/simple-phpunit --version
-
-            - name: PHPStan
-              working-directory: src/Turbo
-              run: vendor/bin/phpstan analyse --no-progress
-
-    tests:
+    turbo-tests:
         runs-on: ubuntu-latest
         strategy:
            fail-fast: false
