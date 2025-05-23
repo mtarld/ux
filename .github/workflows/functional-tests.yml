@@ -3,9 +3,11 @@ name: Functional Tests
 on:
     push:
         paths:
+            - '.github/workflows/functional-tests.yml'
             - 'src/Turbo/**'
     pull_request:
         paths:
+            - '.github/workflows/functional-tests.yml'
             - 'src/Turbo/**'
 
 jobs:
@@ -30,7 +32,7 @@ jobs:
                        symfony-version: '6.4.*'
 
         env:
-            SYMFONY_REQUIRE: ${{ matrix.symfony-version }}
+            SYMFONY_REQUIRE: ${{ matrix.symfony-version || '>=5.4' }}
         services:
             mercure:
                 image: dunglas/mercure
