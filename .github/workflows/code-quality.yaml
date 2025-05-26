@@ -35,7 +35,17 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                package: ${{ fromJson(needs.php-packages-matrix.outputs.packages) }}
+                php-version: [ '8.1', '8.2', '8.3', '8.4']
+                dependency-version: ['']
+                symfony-version: ['']
+                minimum-stability: ['stable']
+                include:
+                    # lowest deps
+                    -   php-version: '8.1'
+                        dependency-version: 'lowest'
+                    # LTS version of Symfony
+                    -   php-version: '8.1'
+                        symfony-version: '6.4.*'
         steps:
             -   name: Checkout
                 uses: actions/checkout@v4
@@ -43,8 +53,9 @@ jobs:
             - name: Configure environment
               run: |
                   echo COLUMNS=120 >> $GITHUB_ENV
-                  echo COMPOSER_MIN_STAB='composer config minimum-stability stable --ansi' >> $GITHUB_ENV
-                  echo COMPOSER_UP='composer update --no-progress --no-interaction --ansi' >> $GITHUB_ENV
+                  echo COMPOSER_MIN_STAB='composer config minimum-stability ${{ matrix.minimum-stability || 'stable' }} --ansi' >> $GITHUB_ENV
+                  echo COMPOSER_UP='composer update ${{ matrix.dependency-version == 'lowest' && '--prefer-lowest' || '' }} --no-progress --no-interaction --ansi' >> $GITHUB_ENV
+                  echo PHPUNIT_INSTALL='vendor/bin/simple-phpunit install' >> $GITHUB_ENV
                   echo PHPSTAN='vendor/bin/phpstan' >> $GITHUB_ENV
 
                   # TODO: Only Turbo has PHPStan configuration, let's improve this later :)
@@ -69,4 +80,4 @@ jobs:
               run: |
                   source .github/workflows/.utils.sh
 
-                  echo "$PACKAGES" | xargs -n1 | parallel -j +3 "_run_task {} '(cd src/{} && $COMPOSER_MIN_STAB && $COMPOSER_UP && $PHPSTAN)'"
+                  echo "$PACKAGES" | xargs -n1 | parallel -j +3 "_run_task {} '(cd src/{} && $COMPOSER_MIN_STAB && $COMPOSER_UP && $PHPUNIT_INSTALL && $PHPSTAN)'"
